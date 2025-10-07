@@ -26,7 +26,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     await client.db("admin").command({ ping: 1 });
     console.log(" Connected to MongoDB");
   } finally {
@@ -34,6 +34,115 @@ async function run() {
   }
 }
 run().catch(console.dir);
+
+// ====== CONNECT USERS COLLECTION ======
+const connectUserCollection = client.db("finalportfolio").collection("connectusers");
+
+// ====== NODEMAILER SETUP ======
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// ====== CONTACT FORM API ======
+app.post("/contact", async (req, res) => {
+  try {
+    const { name, email, message } = req.body;
+
+    if (!name || !email || !message) {
+      return res.status(400).send({ success: false, message: "All fields are required" });
+    }
+
+    const contactData = {
+      name,
+      email,
+      message,
+      createdAt: new Date(),
+    };
+
+    //  Step 1: Save to MongoDB
+    const result = await connectUserCollection.insertOne(contactData);
+
+    //  Step 2: Beautiful Admin Mail Template
+    const adminMail = {
+      from: process.env.EMAIL_USER,
+      to: process.env.EMAIL_USER,
+      subject: `📩 New Message from ${name}`,
+      html: `
+        <div style="font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1e3a8a, #9333ea); padding: 30px;">
+          <div style="max-width: 600px; background: white; margin: auto; border-radius: 15px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <h2 style="color: #1e3a8a; text-align: center;">📨 New Contact Message</h2>
+            <p style="font-size: 16px; color: #333;">Hey <strong>Yasin</strong>, someone just contacted you through your portfolio site!</p>
+            <table style="width:100%; border-collapse: collapse; margin-top: 15px;">
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Name:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">${name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>Email:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">${email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; vertical-align: top;"><strong>Message:</strong></td>
+                <td style="padding: 8px;">${message}</td>
+              </tr>
+            </table>
+            <p style="font-size: 14px; color: gray; text-align: right; margin-top: 20px;">
+              Sent at: ${new Date().toLocaleString()}
+            </p>
+            <div style="text-align: center; margin-top: 20px;">
+              <a href="mailto:${email}" style="background: #1e3a8a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px;">Reply to ${name}</a>
+            </div>
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(adminMail);
+
+    // Step 3: Beautiful User Confirmation Mail Template
+    const userMail = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: ` Thanks ${name}, I've received your message!`,
+      html: `
+        <div style="font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #9333ea, #2563eb); padding: 30px;">
+          <div style="max-width: 600px; background: white; margin: auto; border-radius: 15px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+            <h2 style="color: #2563eb; text-align: center;">Hey ${name} 👋</h2>
+            <p style="font-size: 16px; color: #333;">Thanks for reaching out! I’ve received your message and will get back to you soon.</p>
+            
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 10px; margin-top: 15px;">
+              <p style="margin: 0; font-size: 15px; color: #555;"><strong>Your message:</strong></p>
+              <p style="margin-top: 8px; color: #444;">"${message}"</p>
+            </div>
+
+            <p style="margin-top: 20px; color: #555;">In the meantime, feel free to connect with me on:</p>
+            <div style="text-align: center; margin: 15px 0;">
+              <a href="https://www.linkedin.com" style="margin: 0 8px; text-decoration: none; color: #0a66c2;">LinkedIn</a> |
+              <a href="https://github.com" style="margin: 0 8px; text-decoration: none; color: #333;">GitHub</a> |
+              <a href="https://twitter.com" style="margin: 0 8px; text-decoration: none; color: #1da1f2;">Twitter</a>
+            </div>
+
+            <p style="font-size: 14px; color: gray; text-align: center;">Best regards,<br><strong>Yasin</strong><br>Frontend Developer</p>
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(userMail);
+
+    res.send({ success: true, message: "Message sent & confirmation email delivered", result });
+  } catch (error) {
+    console.error(" Error handling contact:", error);
+    res.status(500).send({ success: false, message: "Failed to send message" });
+  }
+});
+
 
 // ====== USERS COLLECTION ======
 const userCollection = client.db("finalportfolio").collection("users");
@@ -71,14 +180,32 @@ app.get("/users", async (req, res) => {
   }
 });
 
+
+app.get("/users/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
+    const user = await userCollection.findOne({ email });
+
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    }
+
+    res.send({ role: user.role || "user" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Server error" });
+  }
+});
+
+
 app.post("/users", async (req, res) => {
   try {
-    const { name, email, loginType, country, location, deviceType, deviceName, lastLogin } = req.body;
+    const { name, email, loginType, country, location, deviceType, deviceName, lastLogin, role } = req.body;
 
     if (!email) return res.status(400).send({ message: "Email is required" });
 
     const existingUser = await userCollection.findOne({ email });
-    const updateData = { name, loginType, country, location, deviceType, deviceName, lastLogin };
+    const updateData = { name, loginType, country, location, deviceType, deviceName, lastLogin, role: role || "user" };
 
     if (existingUser) {
       const result = await userCollection.updateOne({ email }, { $set: updateData });
@@ -96,6 +223,7 @@ app.post("/users", async (req, res) => {
     res.status(500).send({ success: false, message: "Failed to save user info" });
   }
 });
+
 
 // ====== LOCATION API ======
 app.get("/api/location", async (req, res) => {
