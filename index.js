@@ -37,6 +37,34 @@ run().catch(console.dir);
 
 // ====== CONNECT USERS COLLECTION ======
 const connectUserCollection = client.db("finalportfolio").collection("connectusers");
+// ====== CONNECTED USERS ROUTE ======
+app.get("/connectusers", async (req, res) => {
+  try {
+    
+    const connectedUsers = await connectUserCollection.aggregate([
+      {
+        $group: {
+          _id: "$email",
+          name: { $first: "$name" },
+          email: { $first: "$email" },
+          messages: {
+            $push: {
+              message: "$message",
+              createdAt: "$createdAt",
+            },
+          },
+          messageCount: { $sum: 1 },
+        },
+      },
+      { $sort: { messageCount: -1 } }, 
+    ]).toArray();
+
+    res.send({ success: true, connectedUsers });
+  } catch (error) {
+    console.error("Error fetching connected users:", error);
+    res.status(500).send({ success: false, message: "Failed to fetch connected users" });
+  }
+});
 
 // ====== NODEMAILER SETUP ======
 const nodemailer = require("nodemailer");
