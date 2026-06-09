@@ -4,14 +4,14 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 //  node-fetch import
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-
 
 // MongoDB connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.vbsgl0h.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -36,33 +36,38 @@ async function run() {
 run().catch(console.dir);
 
 // ====== CONNECT USERS COLLECTION ======
-const connectUserCollection = client.db("finalportfolio").collection("connectusers");
+const connectUserCollection = client
+  .db("finalportfolio")
+  .collection("connectusers");
 // ====== CONNECTED USERS ROUTE ======
 app.get("/connectusers", async (req, res) => {
   try {
-    
-    const connectedUsers = await connectUserCollection.aggregate([
-      {
-        $group: {
-          _id: "$email",
-          name: { $first: "$name" },
-          email: { $first: "$email" },
-          messages: {
-            $push: {
-              message: "$message",
-              createdAt: "$createdAt",
+    const connectedUsers = await connectUserCollection
+      .aggregate([
+        {
+          $group: {
+            _id: "$email",
+            name: { $first: "$name" },
+            email: { $first: "$email" },
+            messages: {
+              $push: {
+                message: "$message",
+                createdAt: "$createdAt",
+              },
             },
+            messageCount: { $sum: 1 },
           },
-          messageCount: { $sum: 1 },
         },
-      },
-      { $sort: { messageCount: -1 } }, 
-    ]).toArray();
+        { $sort: { messageCount: -1 } },
+      ])
+      .toArray();
 
     res.send({ success: true, connectedUsers });
   } catch (error) {
     console.error("Error fetching connected users:", error);
-    res.status(500).send({ success: false, message: "Failed to fetch connected users" });
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to fetch connected users" });
   }
 });
 
@@ -83,7 +88,9 @@ app.post("/contact", async (req, res) => {
     const { name, email, message } = req.body;
 
     if (!name || !email || !message) {
-      return res.status(400).send({ success: false, message: "All fields are required" });
+      return res
+        .status(400)
+        .send({ success: false, message: "All fields are required" });
     }
 
     const contactData = {
@@ -151,9 +158,9 @@ app.post("/contact", async (req, res) => {
 
             <p style="margin-top: 20px; color: #555;">In the meantime, feel free to connect with me on:</p>
             <div style="text-align: center; margin: 15px 0;">
-              <a href="https://www.linkedin.com" style="margin: 0 8px; text-decoration: none; color: #0a66c2;">LinkedIn</a> |
-              <a href="https://github.com" style="margin: 0 8px; text-decoration: none; color: #333;">GitHub</a> |
-              <a href="https://twitter.com" style="margin: 0 8px; text-decoration: none; color: #1da1f2;">Twitter</a>
+              <a href="https://www.linkedin.com/in/web-developer-mdyasin/" style="margin: 0 8px; text-decoration: none; color: #0a66c2;">LinkedIn</a> |
+              <a href="https://github.com/mdyasin0" style="margin: 0 8px; text-decoration: none; color: #333;">GitHub</a> |
+              <a href="https://x.com/MDYasin567726" style="margin: 0 8px; text-decoration: none; color: #1da1f2;">Twitter</a>
             </div>
 
             <p style="font-size: 14px; color: gray; text-align: center;">Best regards,<br><strong>Yasin</strong><br>Frontend Developer</p>
@@ -164,123 +171,90 @@ app.post("/contact", async (req, res) => {
 
     await transporter.sendMail(userMail);
 
-    res.send({ success: true, message: "Message sent & confirmation email delivered", result });
+    res.send({
+      success: true,
+      message: "Message sent & confirmation email delivered",
+      result,
+    });
   } catch (error) {
     console.error(" Error handling contact:", error);
     res.status(500).send({ success: false, message: "Failed to send message" });
   }
 });
 
-
 // ====== USERS COLLECTION ======
 const userCollection = client.db("finalportfolio").collection("users");
-app.post("/users/delete", async (req, res) => {
+
+// user data save
+app.post("/users", async (req, res) => {
   try {
-    const { ids } = req.body;
+    const { name, email } = req.body;
 
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).send({ success: false, message: "No user IDs provided" });
+    if (!name || !email) {
+      return res.status(400).send({ message: "Name and email are required" });
     }
 
-    const objectIds = ids.map(id => new ObjectId(id));
+    // check user exists কিনা
+    const existingUser = await userCollection.findOne({ email });
 
-    const result = await userCollection.deleteMany({ _id: { $in: objectIds } });
-
-    if (result.deletedCount > 0) {
-      res.send({ success: true, message: `${result.deletedCount} user(s) deleted successfully` });
-    } else {
-      res.status(404).send({ success: false, message: "No matching users found" });
+    if (existingUser) {
+      return res.send({
+        success: true,
+        message: "User already exists",
+        user: existingUser,
+      });
     }
+
+    // new user create
+    const newUser = {
+      name,
+      email,
+      role: "user",
+      createdAt: new Date(),
+    };
+
+    const result = await userCollection.insertOne(newUser);
+
+    res.send({
+      success: true,
+      message: "User created successfully",
+      user: newUser,
+    });
   } catch (error) {
-    console.error(" Error deleting users:", error);
-    res.status(500).send({ success: false, message: "Failed to delete users" });
+    console.error("User create error:", error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to create user",
+    });
   }
 });
-
-// GET route to fetch all users
+// login user data get 
 app.get("/users", async (req, res) => {
   try {
-    const users = await userCollection.find({}).toArray();
-    res.send({ success: true, users });
-  } catch (error) {
-    console.error(" Error fetching users:", error);
-    res.status(500).send({ success: false, message: "Failed to fetch users" });
-  }
-});
+    const { email } = req.query;
 
+    if (!email) {
+      return res.status(400).send({ message: "Email is required" });
+    }
 
-app.get("/users/:email", async (req, res) => {
-  try {
-    const email = req.params.email;
     const user = await userCollection.findOne({ email });
 
     if (!user) {
       return res.status(404).send({ message: "User not found" });
     }
 
-    res.send({ role: user.role || "user" });
+    res.send({
+      success: true,
+      user,
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Server error" });
+    console.error("Get user error:", error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to get user",
+    });
   }
 });
-
-
-app.post("/users", async (req, res) => {
-  try {
-    const { name, email, loginType, country, location, deviceType, deviceName, lastLogin, role } = req.body;
-
-    if (!email) return res.status(400).send({ message: "Email is required" });
-
-    const existingUser = await userCollection.findOne({ email });
-    const updateData = { name, loginType, country, location, deviceType, deviceName, lastLogin, role: role || "user" };
-
-    if (existingUser) {
-      const result = await userCollection.updateOne({ email }, { $set: updateData });
-      res.send({ success: true, message: "User info updated", result });
-    } else {
-      const result = await userCollection.insertOne({
-        email,
-        ...updateData,
-        createdAt: new Date().toISOString(),
-      });
-      res.send({ success: true, message: "User registered", result });
-    }
-  } catch (error) {
-    console.error("Error saving user:", error);
-    res.status(500).send({ success: false, message: "Failed to save user info" });
-  }
-});
-
-
-// ====== LOCATION API ======
-app.get("/api/location", async (req, res) => {
-  try {
-    const userIP = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-
-    console.log("User IP:", userIP);
-
-    const response = await fetch(`http://ip-api.com/json/${userIP}`);
-    console.log("Location API status:", response.status);
-
-    if (!response.ok) throw new Error("Location API failed");
-
-    const locationData = await response.json();
-
-    const result = {
-      country_name: locationData.country || "Unknown",
-      region: locationData.regionName || "",
-      city: locationData.city || "",
-      ip: locationData.query || "",
-    };
-
-    res.json(result);
-  } catch (error) {
-    console.error(" Error fetching location:", error);
-    res.status(500).json({ error: "Failed to fetch location" });
-  }
-});
-
 
 // ====== PROJECTS COLLECTION ======
 const projectCollection = client.db("finalportfolio").collection("projects");
@@ -290,17 +264,25 @@ app.put("/projects/:id/add/:field", async (req, res) => {
     const { id, field } = req.params;
     const { newItem } = req.body;
 
-    if (!newItem) return res.status(400).send({ message: "New item is required" });
+    if (!newItem)
+      return res.status(400).send({ message: "New item is required" });
 
-    const allowedFields = ["frontendTech", "backendTech", "features", "challenges"];
-    if (!allowedFields.includes(field)) return res.status(400).send({ message: "Invalid field" });
+    const allowedFields = [
+      "frontendTech",
+      "backendTech",
+      "features",
+      "challenges",
+    ];
+    if (!allowedFields.includes(field))
+      return res.status(400).send({ message: "Invalid field" });
 
     const result = await projectCollection.updateOne(
       { _id: new ObjectId(id) },
-      { $push: { [field]: newItem } }
+      { $push: { [field]: newItem } },
     );
 
-    if (result.modifiedCount > 0) res.send({ success: true, message: `New item added to ${field}` });
+    if (result.modifiedCount > 0)
+      res.send({ success: true, message: `New item added to ${field}` });
     else res.status(404).send({ success: false, message: "Project not found" });
   } catch (error) {
     console.error("Error adding item:", error);
@@ -320,7 +302,9 @@ app.get("/projects", async (req, res) => {
 
 app.get("/projects/:id", async (req, res) => {
   try {
-    const project = await projectCollection.findOne({ _id: new ObjectId(req.params.id) });
+    const project = await projectCollection.findOne({
+      _id: new ObjectId(req.params.id),
+    });
     if (!project) return res.status(404).send({ message: "Project not found" });
     res.send(project);
   } catch (error) {
@@ -348,25 +332,158 @@ app.put("/projects/:id", async (req, res) => {
 
     const result = await projectCollection.updateOne(
       { _id: new ObjectId(id) },
-      { $set: updatedFields }
+      { $set: updatedFields },
     );
 
-    if (result.modifiedCount > 0) res.send({ success: true, message: "Project updated successfully" });
-    else res.status(404).send({ success: false, message: "No matching project found" });
+    if (result.modifiedCount > 0)
+      res.send({ success: true, message: "Project updated successfully" });
+    else
+      res
+        .status(404)
+        .send({ success: false, message: "No matching project found" });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ success: false, message: "Failed to update project" });
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to update project" });
   }
 });
 
 app.delete("/projects/:id", async (req, res) => {
   try {
-    const result = await projectCollection.deleteOne({ _id: new ObjectId(req.params.id) });
-    if (result.deletedCount > 0) res.send({ success: true, message: "Project deleted successfully" });
+    const result = await projectCollection.deleteOne({
+      _id: new ObjectId(req.params.id),
+    });
+    if (result.deletedCount > 0)
+      res.send({ success: true, message: "Project deleted successfully" });
     else res.status(404).send({ success: false, message: "Project not found" });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ success: false, message: "Failed to delete project" });
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to delete project" });
+  }
+});
+
+// topprojects collection
+
+const topprojectCollection = client.db("finalportfolio").collection("topprojects");
+
+
+app.get("/topprojects", async (req, res) => {
+  try {
+    const projects = await topprojectCollection.find().toArray();
+    res.send(projects);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Failed to fetch projects" });
+  }
+});
+
+
+
+
+
+app.post("/topprojects", async (req, res) => {
+  try {
+    const project = req.body;
+    const result = await topprojectCollection.insertOne(project);
+    res.send({ success: true, message: "Project added successfully", result });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ success: false, message: "Failed to add project" });
+  }
+});
+
+
+
+app.delete("/topproject/:id", async (req, res) => {
+  try {
+    const result = await topprojectCollection.deleteOne({
+      _id: new ObjectId(req.params.id),
+    });
+    if (result.deletedCount > 0)
+      res.send({ success: true, message: "Project deleted successfully" });
+    else res.status(404).send({ success: false, message: "Project not found" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to delete project" });
+  }
+});
+
+
+
+app.get("/topproject/:id", async (req, res) => {
+  try {
+    const project = await topprojectCollection.findOne({
+      _id: new ObjectId(req.params.id),
+    });
+    if (!project) return res.status(404).send({ message: "Project not found" });
+    res.send(project);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Failed to fetch project" });
+  }
+});
+
+
+app.put("/topprojects/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedFields = req.body;
+    if (updatedFields._id) delete updatedFields._id;
+
+    const result = await topprojectCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedFields },
+    );
+
+    if (result.modifiedCount > 0)
+      res.send({ success: true, message: "Project updated successfully" });
+    else
+      res
+        .status(404)
+        .send({ success: false, message: "No matching project found" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to update project" });
+  }
+});
+
+
+
+app.put("/topprojects/:id/add/:field", async (req, res) => {
+  try {
+    const { id, field } = req.params;
+    const { newItem } = req.body;
+
+    if (!newItem)
+      return res.status(400).send({ message: "New item is required" });
+
+    const allowedFields = [
+      "frontendTech",
+      "backendTech",
+      "features",
+      "challenges",
+    ];
+    if (!allowedFields.includes(field))
+      return res.status(400).send({ message: "Invalid field" });
+
+    const result = await topprojectCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $push: { [field]: newItem } },
+    );
+
+    if (result.modifiedCount > 0)
+      res.send({ success: true, message: `New item added to ${field}` });
+    else res.status(404).send({ success: false, message: "Project not found" });
+  } catch (error) {
+    console.error("Error adding item:", error);
+    res.status(500).send({ success: false, message: "Failed to add item" });
   }
 });
 
@@ -386,20 +503,35 @@ app.get("/resume", async (req, res) => {
 app.put("/resume", async (req, res) => {
   try {
     const { link } = req.body;
-    if (!link) return res.status(400).send({ message: "Resume link is required" });
+    if (!link)
+      return res.status(400).send({ message: "Resume link is required" });
 
-    const result = await resumeCollection.updateOne({}, { $set: { link } }, { upsert: true });
-    res.send({ success: true, message: "Resume link updated successfully", result });
+    const result = await resumeCollection.updateOne(
+      {},
+      { $set: { link } },
+      { upsert: true },
+    );
+    res.send({
+      success: true,
+      message: "Resume link updated successfully",
+      result,
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ success: false, message: "Failed to update resume" });
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to update resume" });
   }
 });
 
 // ====== COLORS COLLECTION ======
 app.get("/colors", async (req, res) => {
   try {
-    const colors = await client.db("finalportfolio").collection("color").find().toArray();
+    const colors = await client
+      .db("finalportfolio")
+      .collection("color")
+      .find()
+      .toArray();
     res.send(colors);
   } catch (error) {
     console.error(error);
@@ -411,15 +543,26 @@ app.put("/colors/:id/:theme/:key", async (req, res) => {
   try {
     const { id, theme, key } = req.params;
     const { newColor } = req.body;
-    if (!newColor) return res.status(400).send({ message: "New color value is required" });
+    if (!newColor)
+      return res.status(400).send({ message: "New color value is required" });
 
     const datacollection = client.db("finalportfolio").collection("color");
     const fieldPath = `${theme}.${key}`;
 
-    const result = await datacollection.updateOne({ _id: new ObjectId(id) }, { $set: { [fieldPath]: newColor } });
+    const result = await datacollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { [fieldPath]: newColor } },
+    );
 
-    if (result.modifiedCount > 0) res.send({ success: true, message: `${theme}.${key} updated successfully` });
-    else res.status(404).send({ success: false, message: "No matching document found" });
+    if (result.modifiedCount > 0)
+      res.send({
+        success: true,
+        message: `${theme}.${key} updated successfully`,
+      });
+    else
+      res
+        .status(404)
+        .send({ success: false, message: "No matching document found" });
   } catch (error) {
     console.error(error);
     res.status(500).send({ success: false, message: "Failed to update color" });
