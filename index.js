@@ -372,11 +372,16 @@ const topprojectCollection = client.db("finalportfolio").collection("topprojects
 
 app.get("/topprojects", async (req, res) => {
   try {
+    console.log("API HIT");
+
+    console.log("collection:", topprojectCollection);
+
     const projects = await topprojectCollection.find().toArray();
+
     res.send(projects);
   } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Failed to fetch projects" });
+    console.error("TOP PROJECT ERROR:", error); 
+    res.status(500).send({ message: error.message });
   }
 });
 
